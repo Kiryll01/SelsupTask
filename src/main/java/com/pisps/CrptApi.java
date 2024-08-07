@@ -10,7 +10,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CrptApi {
-    private static String createDocumentUri = "https://ismp.crpt.ru/api/v3/lk/documents/create";
+    private static final String createDocumentUri = "https://ismp.crpt.ru/api/v3/lk/documents/create";
     private static final HttpClient client = HttpClient.newHttpClient();
 
     public record Document(String description, String docId, String docStatus, String docType, boolean importRequest,
@@ -35,8 +35,9 @@ public class CrptApi {
     private final ExecutorService executor;
 
     private void schedulePeriodicTask() {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(this::scheduledTask, 0, 1, period);
+        try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor()) {
+            scheduler.scheduleAtFixedRate(this::scheduledTask, 0, 1, period);
+        }
     }
     private void scheduledTask() {
         resetRequestsInCurrentPeriod();
@@ -60,7 +61,8 @@ public class CrptApi {
     public void createDoc(Document document, String signature) {
         if (requestsInCurrentPeriod.get() >= requestLimitPerPeriod) {
             System.out.println("Request limit exceeded. Adding request to the queue. queue size " + requestQueue.size());
-            requestQueue.offer(() -> createDoc(document, signature));
+            boolean requestAdded = requestQueue.offer(() -> createDoc(document, signature));
+            if (!requestAdded) System.out.println("request was not added to the queue");
             return;
         }
         requestsInCurrentPeriod.incrementAndGet();
